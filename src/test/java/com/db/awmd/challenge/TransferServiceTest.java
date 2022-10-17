@@ -14,6 +14,9 @@ import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.test.context.junit4.SpringRunner;
 
 import java.math.BigDecimal;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.TimeUnit;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.junit.jupiter.api.Assertions.fail;
@@ -88,5 +91,20 @@ public class TransferServiceTest {
         } catch (NegativeBalanceException ex) {
             assertThat(ex.getMessage()).isEqualTo("Not enough money to perform transfer, account id " + FROM_ACCOUNT_ID);
         }
+    }
+
+    @Test
+    public void doParallelTransfer() throws Exception {
+        createAccountsWithBalances(1000, 0);
+
+        ExecutorService executorService = Executors.newCachedThreadPool();
+        for (int i = 0; i < 100; i++) {
+            executorService.execute(() -> transferService.transfer(FROM_ACCOUNT_ID, TO_ACCOUNT_ID, BigDecimal.valueOf(10)));
+        }
+
+        executorService.shutdown();
+        assertThat(executorService.awaitTermination(3, TimeUnit.SECONDS)).isTrue();
+        assertThat(accountsService.getAccount(FROM_ACCOUNT_ID).getBalance().intValue()).isEqualTo(0);
+        assertThat(accountsService.getAccount(TO_ACCOUNT_ID).getBalance().intValue()).isEqualTo(1000);
     }
 }
